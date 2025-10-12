@@ -1,57 +1,67 @@
-"""
-Lanzador de prácticas con menú (OpenCV).
-Teclas:
-  ↑/↓ navegan | ENTER ejecuta | Q/ESC salir
-"""
-import cv2
-import numpy as np
-from core.registry import all_practices
+import os
+import pkgutil
+import importlib
+import tkinter as tk
+from tkinter import ttk, messagebox
 
-WIN = "Menu | Proyecto Graficación"
+# Siempre usar el paquete "src"
+from src.core.registry import all_practices
 
-def render_menu(items, idx):
-    h, w = 520, 840
-    img = np.full((h, w, 3), 24, np.uint8)
-    cv2.putText(img, "Selecciona una práctica y presiona ENTER",
-                (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (220, 220, 220), 2)
-    y = 90
-    for i, (pid, title, _) in enumerate(items):
-        color = (255, 255, 255) if i == idx else (170, 170, 170)
-        prefix = "▶ " if i == idx else "   "
-        cv2.putText(img, f"{prefix}{pid}: {title}", (40, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        y += 40
-    cv2.putText(img, "↑/↓ mover | ENTER ejecutar | Q/ESC salir",
-                (20, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 220, 255), 1)
-    return img
+# Autoimport de módulos pXX_*.py dentro de src/practicas
+def _autoimport_practicas():
+    import src.practicas as practicas_pkg
+    for mod in pkgutil.iter_modules(practicas_pkg.__path__):
+        name = mod.name
+        # Acepta p00, p01..., p99_*.py
+        if len(name) >= 3 and name[0] == 'p' and name[1:3].isdigit():
+            importlib.import_module(f"src.practicas.{name}")
 
 def main():
-    items = all_practices()
-    if not items:
-        raise SystemExit("No hay prácticas registradas todavía.")
-    idx = 0
-    cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WIN, 960, 560)
+    _autoimport_practicas()  # llena el registro
 
-    while True:
-        cv2.imshow(WIN, render_menu(items, idx))
-        k = cv2.waitKey(30) & 0xFF
-        if k in (27, ord('q'), ord('Q')):
-            break
-        elif k in (ord('\r'), 10, 13):  # ENTER
-            cv2.destroyWindow(WIN)
-            try:
-                items[idx][2]()  # ejecuta práctica
-            except Exception as e:
-                print("Error en la práctica:", e)
-            cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(WIN, 960, 560)
-        elif k in (82, ord('k')):  # ↑ (82 en waitKey), o 'k' estilo vim
-            idx = (idx - 1) % len(items)
-        elif k in (84, ord('j')):  # ↓ (84 en waitKey), o 'j'
-            idx = (idx + 1) % len(items)
+    root = tk.Tk()
+    root.title("Proyecto Graficación – Lanzador de Prácticas")
 
-    cv2.destroyAllWindows()
+    frame = ttk.Frame(root, padding=12)
+    frame.pack(fill="both", expand=True)
+
+    cols = ("ID", "Título")
+    tree = ttk.Treeview(frame, columns=cols, show="headings", height=12)
+    for c in cols:
+        tree.heading(c, text=c)
+        tree.column(c, width=280 if c == "Título" else 80, anchor="w")
+    tree.pack(fill="both", expand=True)
+
+    # Obtener prácticas y ordenarlas por ID (pXX)
+    items = sorted(all_practices(), key=lambda x: x[0])  # (id, title, func)
+
+    for pid, title, _func in items:
+        tree.insert("", "end", iid=pid, values=(pid, title))
+
+    btns = ttk.Frame(frame)
+    btns.pack(fill="x", pady=(8,0))
+
+    def run_selected():
+        sel = tree.selection()
+        if not sel:
+            messagebox.showwarning("Aviso", "Selecciona una práctica.")
+            return
+        pid = sel[0]
+        # Buscar función por ID
+        for _pid, _title, fn in items:
+            if _pid == pid:
+                try:
+                    fn()
+                except Exception as e:
+                    messagebox.showerror("Error ejecutando práctica", str(e))
+                return
+
+    run_btn = ttk.Button(btns, text="Ejecutar", command=run_selected)
+    run_btn.pack(side="right")
+
+    root.mainloop()
 
 if __name__ == "__main__":
+    # En Wayland necesitas esto exportado antes de lanzar Python:
+    #   export QT_QPA_PLATFORM=xcb
     main()
