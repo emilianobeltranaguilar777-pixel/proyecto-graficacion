@@ -1,0 +1,13 @@
+# Ignora TODO por defecto
+/*
+
+# Excepto...
+!.gitignore
+!README.md
+
+# Carpeta de prácticas
+!src/
+!src/practicas/**
+# Evidencias (opcional)
+!assets/
+!assets/capturas/**
